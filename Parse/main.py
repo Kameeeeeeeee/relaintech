@@ -17,7 +17,8 @@ def parse_docx_table(docx_path):
         current_table = []
         for row in table.rows:
             current_row = [cell.text.strip() for cell in row.cells]
-            current_row = current_row[:2] + current_row[3::2]
+            current_row = current_row[1:2] + current_row[3::2]
+            print(current_row)
             current_table.append(current_row)
         table_data.append(current_table)
     
@@ -31,6 +32,7 @@ output_dir = 'csvf'
 os.makedirs(output_dir, exist_ok=True)
 
 headers_csv = [
+    'Номер',
     'Наименование и техническая характеристика',
     'Тип, марка, обозначение документа, опросного листа',
     'Код продукции',
@@ -42,10 +44,13 @@ headers_csv = [
 ]
 
 for table in parsed_tables:
-    headers_ind = [i for i, row in enumerate(table) if all(cell == '' for cell in row[3:])]
-    
+    headers_ind = []
+    for row in range(len(table)):
+        if table[row][2:] == ['', '', '', '', '', '', '']:
+            headers_ind.append(row)
+    print(headers_ind)
     for idx, header_idx in enumerate(headers_ind):
-        clean_name = clean_filename(table[header_idx][2])
+        clean_name = clean_filename(table[header_idx][1])
         
         start_row = header_idx + 1
         end_row = headers_ind[idx + 1] if idx + 1 < len(headers_ind) else len(table)
