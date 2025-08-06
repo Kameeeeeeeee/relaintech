@@ -16,8 +16,11 @@ def parse_docx_table(docx_path):
     for table in doc.tables:
         current_table = []
         for row in table.rows:
-            current_row = [cell.text.strip() for cell in row.cells]
-            current_row = current_row[1:2] + current_row[3::2]
+            current_row = [cell.text.strip().replace("  ", " ").replace("  ", " ").replace(" ,", ",") for cell in row.cells]
+            if len(current_row) > 10:
+                current_row = current_row[1:2] + current_row[3::2]
+            else:
+                current_row = current_row[1:]
             print(current_row)
             current_table.append(current_row)
         table_data.append(current_table)
@@ -54,6 +57,7 @@ for table in parsed_tables:
         
         start_row = header_idx + 1
         end_row = headers_ind[idx + 1] if idx + 1 < len(headers_ind) else len(table)
+        if (start_row==end_row): continue
         rows = table[start_row:end_row]
         
         file_path = os.path.join(output_dir, f"{clean_name}.csv")
