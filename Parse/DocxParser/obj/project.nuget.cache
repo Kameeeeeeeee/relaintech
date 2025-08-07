@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "5mNBV+VbVoM=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\polina\\Documents\\GitHub\\relaintech\\Parse\\DocxParser\\DocxParser.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\polina\\.nuget\\packages\\microsoft.net.illink.tasks\\9.0.7\\microsoft.net.illink.tasks.9.0.7.nupkg.sha512"
+  ],
+  "logs": []
+}
