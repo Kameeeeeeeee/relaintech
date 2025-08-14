@@ -5,17 +5,6 @@ import sys
 import traceback
 import psycopg2
 import uuid
-import logging
-
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger(__name__)
 
 def clean_filename(name):
     """Удаляет запрещенные символы из имени файла"""
@@ -32,24 +21,20 @@ def parse_docx_to_postgres(docx_path, db_params):
         # Подключение к базе данных
         conn = psycopg2.connect(**db_params)
         cursor = conn.cursor()
-        logger.info("Успешное подключение к базе данных PostgreSQL!")
+        print("Успешное подключение к базе данных!")
     except Exception as e:
-        logger.error(f"Ошибка подключения к PostgreSQL: {str(e)}")
-        raise
+        raise Exception(f"Ошибка подключения к PostgreSQL: {str(e)}")
     
     try:
         # Открываем документ
         doc = Document(docx_path)
-        logger.info(f"Файл {docx_path} успешно открыт")
     except Exception as e:
         conn.close()
-        logger.error(f"Ошибка открытия DOCX файла: {str(e)}")
-        raise
+        raise Exception(f"Ошибка открытия DOCX файла: {str(e)}")
     
     table_data = []
     
     # Обрабатываем все таблицы в документе
-    logger.info(f"Начата обработка таблиц в документе")
     for table in doc.tables:
         current_table = []
         for row in table.rows:
@@ -70,9 +55,6 @@ def parse_docx_to_postgres(docx_path, db_params):
             current_table.append(current_row)
         table_data.append(current_table)
     
-    total_inserted = 0
-    total_sections = 0
-    
     # Обрабатываем каждую таблицу
     for table_idx, table in enumerate(table_data):
         headers_ind = []
@@ -83,8 +65,6 @@ def parse_docx_to_postgres(docx_path, db_params):
                 # Проверяем, что все ячейки после 2-й пустые
                 if all(cell == '' for cell in table[row_idx][2:]):
                     headers_ind.append(row_idx)
-        
-        logger.info(f"Таблица {table_idx+1}: найдено {len(headers_ind)} разделов")
         
         # Обрабатываем каждый раздел таблицы
         for idx, header_idx in enumerate(headers_ind):
@@ -104,7 +84,6 @@ def parse_docx_to_postgres(docx_path, db_params):
                 continue
                 
             rows = table[start_row:end_row]
-            total_sections += 1
             
             # Вставляем данные раздела в базу данных
             try:
@@ -127,7 +106,7 @@ def parse_docx_to_postgres(docx_path, db_params):
                         quantity = None
                         
                     try:
-                        unit_mass = float(padded_row[7]) if padded_row[7].strip() else None
+                        unit_mass = int(padded_row[7]) if padded_row[7].strip() else None
                     except:
                         unit_mass = None
                     
@@ -143,22 +122,26 @@ def parse_docx_to_postgres(docx_path, db_params):
                         "Units",
                         "Quantity",
                         "Unit_mass",
-                        "Note"
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        "Note",
+                        "ID_project_document",
+                        "ID_document_section"
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """
                     
                     # Параметры для запроса
                     data = (
                         equipment_id,           # ID_equipment
-                        padded_row[0] or None,  # Equipment_identification
-                        padded_row[1] or None,  # Name_equipment
-                        padded_row[2] or None,  # Type_equipment
-                        padded_row[3] or None,  # Code_product
-                        padded_row[4] or None,  # Supplier
-                        padded_row[5] or None,  # Units
+                        padded_row[0],          # Equipment_identification
+                        padded_row[1],          # Name_equipment
+                        padded_row[2],          # Type_equipment
+                        padded_row[3],          # Code_product
+                        padded_row[4],          # Supplier
+                        padded_row[5],          # Units
                         quantity,               # Quantity
                         unit_mass,              # Unit_mass
-                        padded_row[8] or None   # Note
+                        padded_row[8],          # Note
+                        None,                   # ID_project_document (FK)
+                        None                    # ID_document_section (FK)
                     )
                     
                     # Выполняем запрос
@@ -167,45 +150,38 @@ def parse_docx_to_postgres(docx_path, db_params):
                 
                 # Фиксируем изменения для раздела
                 conn.commit()
-                total_inserted += inserted_count
-                logger.info(f"Раздел '{clean_name}': добавлено {inserted_count} записей")
+                print(f"Раздел '{clean_name}': добавлено {inserted_count} записей")
                 
             except Exception as e:
-                logger.error(f"Ошибка при вставке раздела '{clean_name}': {str(e)}")
+                print(f"Ошибка при вставке раздела '{clean_name}': {str(e)}")
                 conn.rollback()
                 traceback.print_exc()
                 
     # Закрываем соединение с базой
     cursor.close()
     conn.close()
-    logger.info(f"Соединение с PostgreSQL закрыто. Всего обработано: {total_sections} разделов, {total_inserted} записей")
-    return total_inserted
+    print("Соединение с PostgreSQL закрыто")
 
 # Точка входа для вызова через командную строку
 if __name__ == "__main__":
-    if len(sys.argv) < 7:
-        print("Usage: python spec_parser.py <docx_path> <db_host> <db_port> <db_name> <db_user> <db_password>")
+    if len(sys.argv) < 2:
         sys.exit(1)
         
     docx_file_path = sys.argv[1]
     
     # Параметры подключения к БД
     db_params = {
-        "host": sys.argv[2],
-        "port": sys.argv[3],
-        "database": sys.argv[4],
-        "user": sys.argv[5],
-        "password": sys.argv[6]
+        "host": "localhost",
+        "database": "cable_db",  # имя вашей БД
+        "user": "postgres",
+        "password": "test1",
+        "port": "5432"
     }
     
-    logger.info(f"Начата обработка файла: {docx_file_path}")
-    logger.info(f"Параметры БД: {db_params['user']}@{db_params['host']}:{db_params['port']}/{db_params['database']}")
-    
     try:
-        record_count = parse_docx_to_postgres(docx_file_path, db_params)
-        print(f"Обработка успешно завершена! Добавлено записей: {record_count}")
-        sys.exit(0)
+        parse_docx_to_postgres(docx_file_path, db_params)
+        print("Обработка успешно завершена!")
     except Exception as e:
-        logger.error(f"Critical error: {str(e)}")
+        print(f"Critical error: {str(e)}")
         traceback.print_exc()
         sys.exit(2)

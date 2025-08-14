@@ -1,18 +1,28 @@
-﻿using Microsoft.Win32;
+﻿// MainWindow.xaml.cs
+using Microsoft.Win32;
+using Npgsql;
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace DocxParser
 {
     public partial class MainWindow : Window
     {
+        // Фиксированные параметры подключения
+        private const string Host = "localhost";
+        private const string Port = "5432";
+        private const string Database = "cable_db";
+        private const string User = "postgres";
+        private const string Password = "test1";
+
         public MainWindow()
         {
             InitializeComponent();
-            StatusText.Text = "Выберите файл спецификации (.docx) для обработки";
+            StatusText.Text = "Выберите файл спецификации (.docx) для импорта в PostgreSQL";
         }
 
         private void BrowseButton_Click(object sender, RoutedEventArgs e)
@@ -30,7 +40,7 @@ namespace DocxParser
             }
         }
 
-        private void ProcessButton_Click(object sender, RoutedEventArgs e)
+        private async void ProcessButton_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrEmpty(FilePathTextBox.Text) || !File.Exists(FilePathTextBox.Text))
             {
@@ -40,29 +50,42 @@ namespace DocxParser
             }
 
             string docxPath = FilePathTextBox.Text;
-            string outputDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "SpecParserOutput_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
-
-            StatusText.Text = "Обработка начата...";
-
+            
+            StatusText.Text = "Импорт данных начат...";
+            ProcessButton.IsEnabled = false;
+            
             try
             {
-                ProcessWithPython(docxPath, outputDir);
-                StatusText.Text = $"Успешно обработано!\nРезультаты сохранены в:\n{outputDir}";
-                
-                // Открываем папку с результатами
-                Process.Start("explorer.exe", outputDir);
+                // Передаем фиксированные параметры в фоновый поток
+                await Task.Run(() => ProcessWithPython(
+                    docxPath, 
+                    Host, 
+                    Port, 
+                    Database, 
+                    User, 
+                    Password));
+                    
+                StatusText.Text = "Данные успешно импортированы в PostgreSQL!";
             }
             catch (Exception ex)
             {
-                StatusText.Text = $"Ошибка при обработке: {ex.Message}";
-                MessageBox.Show(ex.ToString(), "Критическая ошибка", 
+                StatusText.Text = $"Ошибка при импорте данных: {ex.Message}";
+                MessageBox.Show(ex.ToString(), "Ошибка импорта", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                ProcessButton.IsEnabled = true;
             }
         }
 
-        private void ProcessWithPython(string docxPath, string outputDir)
+        private void ProcessWithPython(
+            string docxPath, 
+            string host, 
+            string port, 
+            string database, 
+            string user, 
+            string password)
         {
             // Найдем python.exe
             string pythonExe = FindPythonExe();
@@ -79,10 +102,18 @@ namespace DocxParser
                 throw new FileNotFoundException($"Python-скрипт не найден: {scriptPath}");
             }
 
+            // Формируем аргументы для Python
+            string arguments = $"\"{scriptPath}\" \"{docxPath}\" " +
+                              $"\"{host}\" " +
+                              $"\"{port}\" " +
+                              $"\"{database}\" " +
+                              $"\"{user}\" " +
+                              $"\"{password}\"";
+            
             var processInfo = new ProcessStartInfo
             {
                 FileName = pythonExe,
-                Arguments = $"\"{scriptPath}\" \"{docxPath}\" \"{outputDir}\"",
+                Arguments = arguments,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -100,13 +131,19 @@ namespace DocxParser
                 process.OutputDataReceived += (sender, e) => 
                 {
                     if (!string.IsNullOrEmpty(e.Data)) 
+                    {
                         outputBuilder.AppendLine(e.Data);
+                        Dispatcher.Invoke(() => StatusText.Text += $"\n{e.Data}");
+                    }
                 };
                 
                 process.ErrorDataReceived += (sender, e) => 
                 {
                     if (!string.IsNullOrEmpty(e.Data)) 
+                    {
                         errorBuilder.AppendLine(e.Data);
+                        Dispatcher.Invoke(() => StatusText.Text += $"\nОШИБКА: {e.Data}");
+                    }
                 };
 
                 process.Start();
@@ -115,7 +152,7 @@ namespace DocxParser
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 
-                process.WaitForExit(60000); // Таймаут 60 секунд
+                process.WaitForExit(120000); // Таймаут 120 секунд
 
                 if (process.ExitCode != 0)
                 {

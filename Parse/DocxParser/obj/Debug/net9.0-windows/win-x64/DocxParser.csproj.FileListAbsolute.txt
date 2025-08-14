@@ -19,3 +19,14 @@ C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\obj\Debug\net9.0-wi
 C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\obj\Debug\net9.0-windows\win-x64\DocxParser.pdb
 C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\obj\Debug\net9.0-windows\win-x64\DocxParser.genruntimeconfig.cache
 C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\obj\Debug\net9.0-windows\win-x64\ref\DocxParser.dll
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\bin\Debug\net9.0-windows\win-x64\spec_parser.py
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\bin\Debug\net9.0-windows\win-x64\DocxParser.exe
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\bin\Debug\net9.0-windows\win-x64\DocxParser.deps.json
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\bin\Debug\net9.0-windows\win-x64\DocxParser.runtimeconfig.json
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\bin\Debug\net9.0-windows\win-x64\DocxParser.dll
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\bin\Debug\net9.0-windows\win-x64\DocxParser.pdb
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\bin\Debug\net9.0-windows\win-x64\Microsoft.Extensions.DependencyInjection.Abstractions.dll
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\bin\Debug\net9.0-windows\win-x64\Microsoft.Extensions.Logging.Abstractions.dll
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\bin\Debug\net9.0-windows\win-x64\Npgsql.dll
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\obj\Debug\net9.0-windows\win-x64\DocxParser.csproj.AssemblyReference.cache
+C:\Users\polina\Documents\GitHub\relaintech\Parse\DocxParser\obj\Debug\net9.0-windows\win-x64\DocxParser.csproj.Up2Date

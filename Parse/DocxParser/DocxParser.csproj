@@ -9,8 +9,11 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
-    <OutputPath>bin\Release</OutputPath>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="8.0.0" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Update="spec_parser.py">
