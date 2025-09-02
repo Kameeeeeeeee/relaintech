@@ -1,3 +1,4 @@
+# SpecifiedWork_parser.py
 from docx import Document
 import os
 import re
@@ -19,28 +20,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def clean_filename(name):
-    """Удаляет запрещенные символы из имени файла"""
-    if not name:
-        return "unnamed"
-        
-    name = re.sub(r'\s+', ' ', name)
-    forbidden_chars = r'[\\/*?:"<>|]'
-    return re.sub(forbidden_chars, '', name).strip()
-
-def is_number(s):
-    """Проверяет, можно ли преобразовать строку в число (целое или дробное)"""
-    if not s:
-        return False
-    try:
-        s_clean = s.replace(',', '.').replace(' ', '')
-        float(s_clean)
-        return True
-    except ValueError:
-        return False
-
-def parse_docx_to_postgres(docx_path, db_params):
-    """Основная функция для обработки DOCX файла и записи в PostgreSQL"""
+def parse_docx_to_specified_work(docx_path, db_params, project_document_id, document_section_id):
+    """Основная функция для обработки DOCX файла и записи в таблицу SpecifiedWork"""
     try:
         conn = psycopg2.connect(**db_params)
         cursor = conn.cursor()
@@ -107,105 +88,83 @@ def parse_docx_to_postgres(docx_path, db_params):
 
         # Заменяем NaN на пустые строки
         df_cleaned = df_cleaned.fillna('')
+        
+        # Переименовываем столбцы в соответствии с ожидаемой структурой
+        # Предполагаем, что структура: [№ п/п, Наименование, Ед. изм., Кол-во, Примечание]
+        expected_columns = ['Work_identification', 'Name_work', 'Units', 'Quantity', 'Note']
+        for i, col in enumerate(df_cleaned.columns):
+            if i < len(expected_columns):
+                df_cleaned = df_cleaned.rename(columns={col: expected_columns[i]})
+            else:
+                # Если столбцов больше, чем ожидалось, добавляем к примечанию
+                df_cleaned[expected_columns[4]] = df_cleaned[expected_columns[4]] + ' ' + df_cleaned[col]
+        
+        # Оставляем только нужные столбцы (обрезаем до 5)
+        df_cleaned = df_cleaned[expected_columns[:min(len(df_cleaned.columns), 5)]]
 
-        # Проходим по всем строкам таблицы
         try:
             inserted_count = 0
             for idx, row in df_cleaned.iterrows():
-                row_data = row.tolist()[1:]
-                # Пропускаем строки, где второй столбец содержит менее двух точек
-                if row_data[0].count('.') < 2 or len(set(row_data)) == 1:
+                # Пропускаем заголовки и разделители
+                if idx < 2 or not re.match(r'^\d+\.\d+(\.\d+)*$', str(row.get('Work_identification', ''))):
                     continue
-
-                # print(row_data)
                 
-                padded_row = (row_data + [''] * 9)[:9]
+                # Извлекаем данные из строки
+                work_identification = row.get('Work_identification', '')
+                name_work = row.get('Name_work', '')
+                units = row.get('Units', '')
+                quantity = row.get('Quantity', '')
+                note = row.get('Note', '')
                 
-                # Генерируем UUID для оборудования
-                equipment_id = str(uuid.uuid4())
+                # Обработка единиц измерения (может быть составной, например "м/шт")
+                units_parts = str(units).split('/')
+                units1 = units_parts[0].strip() if units_parts and units_parts[0].strip() else None
+                units2 = units_parts[1].strip() if len(units_parts) > 1 and units_parts[1].strip() else None
                 
-                # Определяем значения для Type_equipment и Code_product
-                type_equipment = padded_row[2] or None
-                code_product = padded_row[3] or None
-                supplier = (padded_row[4] or '').strip().lower()
+                # Обработка количества (может быть составным, например "1482/494")
+                quantity_parts = str(quantity).split('/')
+                quantity1 = None
+                quantity2 = None
                 
-                # Специальная обработка для производителя "Фенсис"
-                if 'фенсис' in supplier:
-                    if type_equipment and is_number(type_equipment) and not code_product:
-                        code_product = type_equipment
-                        type_equipment = None
-                
-                # Обработка количеств
-                quantity_str = padded_row[6].replace(',', '.')
-                if '/' in quantity_str:
-                    quantity_parts = quantity_str.split('/')
-                    quantity1 = quantity_parts[0]
-                    quantity2 = quantity_parts[1] if len(quantity_parts) > 1 else None
-                else:
-                    quantity1 = quantity_str
-                    quantity2 = None
-                
-                # Преобразование числовых полей
                 try:
-                    quantity1 = float(quantity1) if quantity1 else None
-                except:
-                    quantity1 = None
-                try:
-                    quantity2 = float(quantity2) if quantity2 else None
-                except:
-                    quantity2 = None
-                    
-                try:
-                    unit_mass = float(padded_row[7].replace(',', '.')) if padded_row[7].strip() else None
-                except:
-                    unit_mass = None
-
-                # Капитализация поставщика
-                if padded_row[4] and padded_row[4] == padded_row[4].lower():
-                    padded_row[4] = padded_row[4].capitalize()
-
-                # Обработка единиц измерения
-                units = padded_row[5] or ''
-                if '/' in units:
-                    units_parts = units.split('/')
-                    units1 = units_parts[0]
-                    units2 = units_parts[1] if len(units_parts) > 1 else None
-                else:
-                    units1 = units
-                    units2 = None
-
+                    if quantity_parts and quantity_parts[0].strip():
+                        quantity1 = float(quantity_parts[0].replace(',', '.').strip())
+                    if len(quantity_parts) > 1 and quantity_parts[1].strip():
+                        quantity2 = float(quantity_parts[1].replace(',', '.').strip())
+                except ValueError:
+                    logger.warning(f"Не удалось преобразовать количество: {quantity}")
+                
+                # Генерируем UUID для работы
+                work_id = str(uuid.uuid4())
+                
                 # Формируем запрос
                 insert_query = '''
-                INSERT INTO "Equipment" (
-                    "ID_equipment",
-                    "Equipment_identification",
-                    "Name_equipment",
-                    "Type_equipment",
-                    "Code_product",
-                    "Supplier",
+                INSERT INTO "SpecifiedWork" (
+                    "ID_work",
+                    "ID_project_document",
+                    "ID_document_section",
+                    "Work_identification",
+                    "Name_work",
                     "Units1",
                     "Units2",
                     "Quantity1",
                     "Quantity2",
-                    "Unit_mass",
                     "Note"
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 '''
                 
                 # Параметры для запроса
                 data = (
-                    equipment_id,
-                    padded_row[0] or None,
-                    padded_row[1] or None,
-                    type_equipment,
-                    code_product,
-                    padded_row[4] or None,
+                    work_id,
+                    project_document_id,
+                    document_section_id,
+                    work_identification,
+                    name_work,
                     units1,
                     units2,
                     quantity1,
                     quantity2,
-                    unit_mass,
-                    padded_row[8] or None
+                    note
                 )
                 
                 # Выполняем запрос
@@ -229,6 +188,12 @@ def parse_docx_to_postgres(docx_path, db_params):
 
 if __name__ == "__main__":
     docx_file_path = sys.argv[1]
+    if len(sys.argv) < 3:
+        project_document_id = ""
+        document_section_id = ""
+    else:
+        project_document_id = sys.argv[2]
+        document_section_id = sys.argv[3]
     
     db_params = {
         "host": "localhost",
@@ -241,7 +206,12 @@ if __name__ == "__main__":
     logger.info(f"Начата обработка файла: {docx_file_path}")
     
     try:
-        record_count = parse_docx_to_postgres(docx_file_path, db_params)
+        record_count = parse_docx_to_specified_work(
+            docx_file_path, 
+            db_params, 
+            project_document_id, 
+            document_section_id
+        )
         print(f"Обработка успешно завершена! Добавлено записей: {record_count}")
         sys.exit(0)
     except Exception as e:

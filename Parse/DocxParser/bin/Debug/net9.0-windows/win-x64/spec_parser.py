@@ -26,6 +26,18 @@ def clean_filename(name):
     forbidden_chars = r'[\\/*?:"<>|]'
     return re.sub(forbidden_chars, '', name).strip()
 
+def is_number(s):
+    """Проверяет, можно ли преобразовать строку в число (целое или дробное)"""
+    if not s:
+        return False
+    try:
+        # Пробуем преобразовать, учитывая возможные запятые в дробных числах
+        s_clean = s.replace(',', '.').replace(' ', '')
+        float(s_clean)
+        return True
+    except ValueError:
+        return False
+
 def parse_docx_to_postgres(docx_path, db_params):
     """Основная функция для обработки DOCX файла и записи в PostgreSQL"""
     try:
@@ -120,6 +132,19 @@ def parse_docx_to_postgres(docx_path, db_params):
                     # Подготовка данных
                     equipment_id = str(uuid.uuid4())
                     
+                    # Определяем значения для Type_equipment и Code_product
+                    type_equipment = padded_row[2] or None
+                    code_product = padded_row[3] or None
+                    supplier = (padded_row[4] or '').strip().lower()
+                    
+                    # Специальная обработка для производителя "Фенсис"
+                    if 'фенсис' in supplier:
+                        # Если Type_equipment - число, а Code_product пустой
+                        if type_equipment and is_number(type_equipment) and not code_product:
+                            # Меняем поля местами
+                            code_product = type_equipment
+                            type_equipment = None
+                    
                     # Преобразование числовых полей
                     try:
                         quantity = int(padded_row[6]) if padded_row[6].strip() else None
@@ -127,7 +152,7 @@ def parse_docx_to_postgres(docx_path, db_params):
                         quantity = None
                         
                     try:
-                        unit_mass = float(padded_row[7]) if padded_row[7].strip() else None
+                        unit_mass = float(padded_row[7].replace(',', '.')) if padded_row[7].strip() else None
                     except:
                         unit_mass = None
                     
@@ -146,14 +171,15 @@ def parse_docx_to_postgres(docx_path, db_params):
                         "Note"
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """
-                    
+                    if padded_row[4] == padded_row[4].lower():
+                        padded_row[4] = padded_row[4].capitalize()
                     # Параметры для запроса
                     data = (
                         equipment_id,           # ID_equipment
                         padded_row[0] or None,  # Equipment_identification
                         padded_row[1] or None,  # Name_equipment
-                        padded_row[2] or None,  # Type_equipment
-                        padded_row[3] or None,  # Code_product
+                        type_equipment,         # Type_equipment (модифицировано)
+                        code_product,           # Code_product (модифицировано)
                         padded_row[4] or None,  # Supplier
                         padded_row[5] or None,  # Units
                         quantity,               # Quantity
